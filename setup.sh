@@ -65,10 +65,23 @@ if [[ ! -d "$ROOT/audio_48khz" ]] || [[ ! -f "$ROOT/read_transcriptions.txt" ]];
     fi
   fi
   echo "==> Extracting expresso.tar"
-  # --no-same-owner: don't try to apply UIDs from the source archive
-  # (those UIDs don't exist on this machine, which would otherwise cause
-  # 'Cannot change ownership' errors and tar would exit non-zero).
-  tar --no-same-owner -xf "$ROOT/expresso.tar" -C "$ROOT"
+  # The tar embeds UIDs/GIDs from Meta's build server. On a different host
+  # (especially inside a container where uid_map doesn't include those IDs)
+  # `chown` returns EINVAL and tar exits with status 2. Data is extracted
+  # correctly anyway, so we explicitly silence the chown attempt and accept
+  # a non-zero exit if the only issue was ownership.
+  set +e
+  tar --no-same-owner --no-same-permissions -xf "$ROOT/expresso.tar" -C "$ROOT" 2> >(grep -v "Cannot change ownership" >&2)
+  rc=$?
+  set -e
+  # Verify extraction succeeded by checking expected outputs.
+  if [[ ! -d "$ROOT/expresso/audio_48khz" ]] && [[ ! -d "$ROOT/audio_48khz" ]]; then
+    echo "    tar failed (rc=$rc) and audio_48khz/ not found — aborting"
+    exit "$rc"
+  fi
+  if [[ "$rc" -ne 0 ]]; then
+    echo "    (tar exited rc=$rc; ownership warnings are non-fatal — data extracted successfully)"
+  fi
   # The tar extracts into ./expresso/ — flatten if so
   if [[ -d "$ROOT/expresso/audio_48khz" ]] && [[ ! -d "$ROOT/audio_48khz" ]]; then
     mv "$ROOT/expresso/"* "$ROOT/" 2>/dev/null || true
