@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Datasets / artifacts (do NOT commit)
+audio_48khz/
+splits/
+nytopop_expresso_conv/
+expresso_split_v2/
+expresso/
+read_transcriptions.txt
+VAD_segments.txt
+LICENSE.txt
+README.txt
+
+# Archives
+expresso.tar
+*.tar.gz
+*.tar
+*.parquet
+
+# OS
+.DS_Store
+Thumbs.db
