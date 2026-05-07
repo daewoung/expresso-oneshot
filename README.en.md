@@ -68,11 +68,17 @@ ROOT=/data/expresso bash setup.sh    # store data elsewhere
 
 Each step checks for its outputs and is skipped if already complete.
 
-## Caveats
+## Intended use
 
-- Conv transcripts come from automatic ASR, so expect occasional errors. Non-verbal styles (`conv-animal`, `conv-nonverbal`) may have nearly meaningless transcripts (e.g., `"Ribbit Ribbit Ribbit"`).
-- Longform transcripts are file-level, not segment-aligned. Slicing longform audio to fit the split time-ranges will desynchronise the text. Apply forced alignment or skip longform during slicing.
-- Train, dev, and test are produced by cutting the same source recordings along the time axis, so all four speakers appear in every split. This is not a folder-organization mistake (speaker labels are correct); it is identity overlap of the same speakers' acoustic characteristics across splits. The setup is unsuitable for unseen-speaker evaluation, but is the intended design for expressive resynthesis on these four speakers.
+The dataset follows the design of the Expresso paper, which targets expressive speech synthesis and resynthesis on the four speakers (ex01–ex04). Train, dev, and test are time-axis cuts of the same source recordings, so all four speakers appear in every split. Accordingly:
+
+- **Suitable for**: multi-speaker TTS on these four speakers, speaker/style-conditional synthesis, expressive resynthesis. Dev/test serve as training-progress monitors (overfitting checks).
+- **Not suitable for**: evaluating generalisation to speakers not seen during training (zero-shot speakers, unseen-speaker ASR). For that scenario the official splits should be ignored and the data re-partitioned by speaker — but with only four speakers, a statistically meaningful evaluation is unlikely.
+
+## Data-quality notes
+
+- Conv transcripts come from automatic ASR (Parakeet TDT), so expect occasional errors. Non-verbal styles (`conv-animal`, `conv-nonverbal`) may carry nearly meaningless transcripts (e.g., `"Ribbit Ribbit Ribbit"`).
+- Longform transcripts are file-level, not segment-aligned. Slicing longform audio to the split time-ranges desynchronises the text — apply forced alignment or skip longform.
 
 ## License
 

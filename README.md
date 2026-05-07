@@ -68,11 +68,17 @@ ROOT=/data/expresso bash setup.sh    # 데이터 저장 위치 변경
 
 각 단계는 결과물 존재 여부를 확인하고 이미 완료된 단계는 건너뛴다.
 
-## 한계
+## 사용 시나리오
 
-- conv 대본은 ASR 자동 생성이라 일부 오류가 있다. 비언어적 스타일(`conv-animal`, `conv-nonverbal`)은 대본이 거의 무의미할 수 있다 (예: `"Ribbit Ribbit Ribbit"`).
+이 데이터셋은 4 화자(ex01~ex04)에 대한 **표현형 음성 합성·리신서시스**를 목표로 한 Expresso 논문의 설계를 그대로 따른다. train/dev/test는 같은 원본 wav를 시간 축으로 나눈 것이므로 모든 화자가 세 split에 등장한다. 따라서:
+
+- **적합**: 4 화자 multi-speaker TTS, 화자/스타일 conditional 합성, expressive resynthesis. dev/test는 overfitting 모니터링 용도로 사용한다.
+- **부적합**: 학습 시 보지 못한 화자에 대한 일반화 평가(zero-shot speaker, unseen-speaker ASR 등). 이 경우 splits를 무시하고 화자 단위로 직접 분할해야 하는데, 화자가 4명뿐이라 통계적으로 의미 있는 평가는 어렵다.
+
+## 데이터 품질 주의사항
+
+- conv 대본은 자동 ASR(Parakeet TDT) 결과라 일부 오류가 있다. 비언어적 스타일(`conv-animal`, `conv-nonverbal`)은 대본이 거의 무의미할 수 있다 (예: `"Ribbit Ribbit Ribbit"`).
 - longform 대본은 파일 단위 전체 텍스트로, segment 시간과 정렬되어 있지 않다. 시간 단위로 자르면 텍스트가 일치하지 않으므로 forced alignment를 별도로 적용하거나 longform을 학습에서 제외해야 한다.
-- train/dev/test는 같은 원본 wav를 시간 구간으로 나눈 것이므로, 4 화자 모두가 세 split에 동시에 등장한다. 이는 폴더 구조상 화자가 잘못 섞여 있다는 의미가 아니라(화자 라벨은 정확하다), 동일 화자의 음향 특성이 train과 test 양쪽에 노출된다는 뜻이다. 화자 일반화 평가에는 부적합하지만, 표현형 합성·리신서시스처럼 4 화자 모델을 만들 때는 의도된 설계이다.
 
 ## 라이선스
 
