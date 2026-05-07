@@ -1,5 +1,7 @@
 # Expresso One-Type
 
+> [English version](README.en.md) · 한국어 ↓
+
 Meta/Facebook Research의 [Expresso](https://arxiv.org/abs/2308.05725) 데이터셋(read 11h + improvised conversational 33h, 4 화자, 48kHz)을 학습용으로 재구성하는 자동화 파이프라인.
 
 **한 줄로 끝.** 빈 머신에서 `bash setup.sh` 한 번이면 다운로드부터 split 분할, 대본 매칭, 배포용 tarball까지 자동.
