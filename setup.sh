@@ -65,7 +65,10 @@ if [[ ! -d "$ROOT/audio_48khz" ]] || [[ ! -f "$ROOT/read_transcriptions.txt" ]];
     fi
   fi
   echo "==> Extracting expresso.tar"
-  tar xf "$ROOT/expresso.tar" -C "$ROOT"
+  # --no-same-owner: don't try to apply UIDs from the source archive
+  # (those UIDs don't exist on this machine, which would otherwise cause
+  # 'Cannot change ownership' errors and tar would exit non-zero).
+  tar --no-same-owner -xf "$ROOT/expresso.tar" -C "$ROOT"
   # The tar extracts into ./expresso/ — flatten if so
   if [[ -d "$ROOT/expresso/audio_48khz" ]] && [[ ! -d "$ROOT/audio_48khz" ]]; then
     mv "$ROOT/expresso/"* "$ROOT/" 2>/dev/null || true

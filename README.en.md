@@ -1,116 +1,90 @@
-<div align="center">
+# expresso-oneshot
 
-# Expresso One-Shot
+A reproducible pipeline that turns Meta's [Expresso](https://arxiv.org/abs/2308.05725) dataset (read 11h + improvised conversational 33h, 4 speakers, 48kHz) into a unified, training-ready directory layout with paired transcripts and the official train/dev/test splits applied.
 
-**Zero to a training-ready Expresso dataset in one command.**
+[한국어](README.md)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Dataset: CC BY-NC 4.0](https://img.shields.io/badge/Dataset-CC%20BY--NC%204.0-orange.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
-[![Paper](https://img.shields.io/badge/arXiv-2308.05725-b31b1b.svg)](https://arxiv.org/abs/2308.05725)
+## Setup
 
-English · [한국어](README.md)
-
-</div>
-
----
-
-A one-command pipeline that downloads, segments, transcribes, and packages Meta's [Expresso dataset](https://arxiv.org/abs/2308.05725) (read 11h + improvised conversational 33h, 4 speakers, 48kHz) into a training-ready folder with unified read + conv structure, transcripts, and official train/dev/test splits.
-
-## ⚡ Quick Start
-
-```bash
-git clone <YOUR_REPO_URL>
-cd <REPO_DIR>
+```
+git clone https://github.com/daewoung/expresso-oneshot.git
+cd expresso-oneshot
 bash setup.sh
 ```
 
-20–70 minutes later, your dataset is ready. Needs ~80 GB disk, ~45 GB download.
+`setup.sh` provisions the venv, installs dependencies, downloads the original Meta tar and the `nytopop/expresso-conversational` parquet shards, builds the splits, and packages the result. The script can be interrupted and re-run safely; completed steps are skipped on subsequent invocations.
 
-## 🎯 Features
+Runtime 20–70 min · disk ~80 GB · download ~45 GB.
 
-- 🚀 **One-command setup** — venv, deps, downloads, builds, all automatic
-- 🔁 **Idempotent** — interrupt anytime, re-run picks up where it left off
-- 📦 **Self-contained tarball** — symlinks dereferenced, recipient just extracts
-- 🎙️ **Read + Conv unified** — single folder hierarchy for everything
-- 📝 **Transcripts paired with every wav** — `.txt` next to each `.wav`
-- 🎚️ **Official splits respected** — time-range based, zero audio leakage between train/dev/test
-
-## 📦 What you get
+## Output
 
 ```
 expresso_split_v2/
-├── train/{ex01..ex04}/
-│   ├── confused/, default/, ...        ← read 7 styles
-│   └── conv-angry/, conv-default/, ... ← conv 23~24 styles
-├── dev/, test/   (same structure)
-├── longform/     (8 long read files + splits.json)
+├── train/{ex01,ex02,ex03,ex04}/
+│   ├── confused/, default/, enunciated/, happy/,
+│   │   laughing/, sad/, whisper/                ← read 7 styles
+│   └── conv-angry/, conv-default/, …            ← conv 23~24 styles
+├── dev/, test/                                  (same structure)
+├── longform/                                    (8 long read files + splits.json)
 ├── stats.json
 └── README.md
 ```
 
-Every `.wav` has a sibling `.txt` with its transcript.
+Every `*.wav` has a sibling `*.txt` carrying its transcript.
 
 | split | read | conv | total | duration |
 | --- | --- | --- | --- | --- |
-| train | 10,380 | 29,438 | **39,818** | **41.10 h** |
+| train | 10,380 | 29,438 | 39,818 | 41.10 h |
 | dev | 628 | 834 | 1,462 | 1.43 h |
 | test | 588 | 878 | 1,466 | 1.39 h |
 | longform | — | — | 8 | 0.34 h |
-| **GRAND** | **11,596** | **31,150** | **42,754** | **44.26 h** |
+| total | 11,596 | 31,150 | 42,754 | 44.26 h |
 
-## 🔧 Requirements
+## Data sources
 
-- **Python ≥ 3.10**
-- **~80 GB free disk** (30 GB raw tar + 15 GB parquet + 16 GB output + 17 GB redistributable archive)
-- **Internet** (~45 GB download)
-- Optional: `aria2c` (parallel download), falls back to `curl`
+| Component | Source | Notes |
+| --- | --- | --- |
+| read audio + transcripts | Meta tar (`dl.fbaipublicfiles.com/textless_nlp/expresso/data/expresso.tar`) | 48kHz mono, human-written transcripts |
+| conv audio + transcripts | HuggingFace [`nytopop/expresso-conversational`](https://huggingface.co/datasets/nytopop/expresso-conversational) | Already mono-split + VAD-segmented + Parakeet TDT ASR transcripts |
+| train/dev/test definitions | Meta tar's `splits/{train,dev,test}.txt` | Time-range based |
 
-## ⚙️ Options
+## Pipeline
 
-```bash
-bash setup.sh                 # full pipeline
-bash setup.sh --skip-tar      # skip the redistributable tarball
-bash setup.sh --tar-only      # only re-create the tarball
+1. **`build_split.py`** — extracts read entries from `splits/*.txt`, symlinks them from `audio_48khz/`, and pairs each with its transcript line. Files exceeding 30 s (longform) are routed into `longform/` with a `splits.json` describing the time range each split owns.
+2. **`build_conv_split.py`** — decodes 36 parquet shards. Each segment id (`{spk1}-{spk2}_{styles}_{dlg_id}_{start_sample}_{end_sample}`) yields a midpoint that determines its split via the time ranges in `splits/*.txt`. The parquet's authoritative `speaker_id` and `style` columns drive folder placement.
+3. **Merge** — moves `expresso_split_v2/conv/{split}/{speaker}/{style}/` → `expresso_split_v2/{split}/{speaker}/conv-{style}/`. Read folders keep plain style names; conv folders carry a `conv-` prefix.
+4. **Archive** (optional) — `tar czhf` dereferences the read symlinks so the resulting tarball is self-contained.
+
+## Options
+
+```
+bash setup.sh                  # full pipeline
+bash setup.sh --skip-tar       # skip the redistributable tarball
+bash setup.sh --tar-only       # only re-create the tarball
 
 PYTHON_BIN=python3.11 bash setup.sh
 ROOT=/data/expresso bash setup.sh    # store data elsewhere
 ```
 
-## 🧩 Data sources
+Each step checks for its outputs and is skipped if already complete.
 
-| Component | Source | Notes |
-| --- | --- | --- |
-| read audio + transcripts | Meta tar (`dl.fbaipublicfiles.com`) | Original 48kHz mono, human transcripts |
-| conv audio + transcripts | HuggingFace [`nytopop/expresso-conversational`](https://huggingface.co/datasets/nytopop/expresso-conversational) | Already mono-split + segmented + Parakeet ASR |
-| train/dev/test definitions | Meta tar (`splits/*.txt`) | Time-range based |
+## Caveats
 
-## 🔬 Pipeline
+- Conv transcripts come from automatic ASR, so expect occasional errors. Non-verbal styles (`conv-animal`, `conv-nonverbal`) may have nearly meaningless transcripts (e.g., `"Ribbit Ribbit Ribbit"`).
+- Longform transcripts are file-level, not segment-aligned. Slicing longform audio to fit the split time-ranges will desynchronise the text. Apply forced alignment or skip longform during slicing.
+- Train, dev, and test are produced by cutting the same source recordings along the time axis, so all four speakers appear in every split. This is not a folder-organization mistake (speaker labels are correct); it is identity overlap of the same speakers' acoustic characteristics across splits. The setup is unsuitable for unseen-speaker evaluation, but is the intended design for expressive resynthesis on these four speakers.
 
-1. **`build_split.py`** — read processing: extracts read entries from `splits/*.txt`, symlinks into `audio_48khz/`, pairs with transcripts. Files over 30 s (longform) get a separate folder.
-2. **`build_conv_split.py`** — conv processing: decodes 36 parquet shards, parses each segment's ID, maps midpoint to a split's time range, writes mono wavs.
-3. **Merge** — moves `conv/{split}/…` under `{split}/{speaker}/conv-{style}/` (read keeps plain style names).
-4. **Optionally** — `tar czhf` to dereference symlinks and produce a self-contained archive.
+## License
 
-## ⚠️ Known limitations
+Scripts in this repository: MIT.
+Expresso dataset itself: CC BY-NC 4.0 (non-commercial use only).
 
-- **Conv transcripts are auto-generated** by Parakeet ASR. Non-verbal styles (`conv-animal`, `conv-nonverbal`) may have nearly meaningless transcripts (e.g., `"Ribbit Ribbit Ribbit"`).
-- **Longform transcripts are file-level, not segment-aligned.** Use forced alignment or skip longform when slicing.
-- **Speaker leakage exists.** Splits divide audio by time, so every speaker appears in train, dev, and test. Not suitable for unseen-speaker evaluation.
+## References
 
-## 📜 License
+- [EXPRESSO paper (arXiv:2308.05725)](https://arxiv.org/abs/2308.05725)
+- [Demo page](https://speechbot.github.io/expresso/)
+- [Original textlesslib processing code](https://github.com/facebookresearch/textlesslib/tree/main/examples/expresso/dataset)
+- [`nytopop/expresso-conversational`](https://huggingface.co/datasets/nytopop/expresso-conversational)
+- [NVIDIA Parakeet TDT 0.6B V2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2)
 
-- Scripts (this repo): **MIT**
-- Expresso dataset itself: **CC BY-NC 4.0** (non-commercial)
-
-## 📚 References
-
-- 📄 [EXPRESSO paper](https://arxiv.org/abs/2308.05725)
-- 🎧 [Demo page](https://speechbot.github.io/expresso/)
-- 🛠️ [Original textlesslib processing code](https://github.com/facebookresearch/textlesslib/tree/main/examples/expresso/dataset)
-- 🤗 [`nytopop/expresso-conversational`](https://huggingface.co/datasets/nytopop/expresso-conversational)
-- 🎤 [NVIDIA Parakeet TDT 0.6B V2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2)
-
----
-
-Detailed structure, per-style stats, and usage examples in [SETUP.md](SETUP.md).
+See [SETUP.md](SETUP.md) for detailed structure and per-style statistics.
