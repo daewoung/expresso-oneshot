@@ -23,8 +23,9 @@ expresso_split_v2/
 ├── train/{ex01,ex02,ex03,ex04}/
 │   ├── confused/, default/, enunciated/, happy/,
 │   │   laughing/, sad/, whisper/                ← read 7 styles
-│   └── conv-angry/, conv-default/, …            ← conv 23~24 styles
+│   └── conv-angry/, conv-default/, …            ← conv 19~20 styles
 ├── dev/, test/                                  (동일 구조)
+├── train-exclude/, dev-exclude/, test-exclude/  (animal/child 스타일 제외 보관)
 ├── longform/                                    (8 long read files + splits.json)
 ├── stats.json
 └── README.md
@@ -53,7 +54,8 @@ expresso_split_v2/
 1. **`build_split.py`** — read 항목 추출 후 `audio_48khz/`로 symlink, 대본 매칭. 30초 초과(longform)는 `longform/`으로 분리.
 2. **`build_conv_split.py`** — parquet shard 36개 디코드. 각 segment의 ID(`{spk1}-{spk2}_{styles}_{dlg_id}_{start_sample}_{end_sample}`)에서 시간 정보 추출 후, midpoint가 `splits/*.txt`의 어느 시간 구간에 속하는지로 split 결정. parquet의 `speaker_id`와 `style` 컬럼을 그대로 폴더 분류에 사용.
 3. **병합** — `expresso_split_v2/conv/{split}/{speaker}/{style}/`를 `expresso_split_v2/{split}/{speaker}/conv-{style}/`로 이동. read 폴더는 prefix 없이, conv 폴더는 `conv-` prefix.
-4. **압축** (선택) — `tar czhf`로 symlink dereference하여 self-contained tarball 생성.
+4. **필터** — 페르소나 TTS에 부적합한 동물·아이 모사 스타일(`conv-animal*`, `conv-child*`)을 `{split}-exclude/{speaker}/` 트리로 분리. 데이터는 보존되며 메인 트리에서만 빠진다.
+5. **압축** (선택) — `tar czhf`로 symlink dereference하여 self-contained tarball 생성. `*-exclude/`는 tarball에서 제외된다.
 
 ## 옵션
 
@@ -77,7 +79,7 @@ ROOT=/data/expresso bash setup.sh    # 데이터 저장 위치 변경
 
 ## 데이터 품질 주의사항
 
-- conv 대본은 자동 ASR(Parakeet TDT) 결과라 일부 오류가 있다. 비언어적 스타일(`conv-animal`, `conv-nonverbal`)은 대본이 거의 무의미할 수 있다 (예: `"Ribbit Ribbit Ribbit"`).
+- conv 대본은 자동 ASR(Parakeet TDT) 결과라 일부 오류가 있다. `conv-nonverbal`은 실제 대사가 있지만 호흡·웃음·신음이 섞여 있고, `conv-animal*`/`conv-child*`는 대본이 거의 무의미해(`"Ribbit Ribbit Ribbit"`) 페르소나 TTS에 부적합 — 본 스크립트는 후자를 자동으로 `*-exclude/`로 빼낸다.
 - longform 대본은 파일 단위 전체 텍스트로, segment 시간과 정렬되어 있지 않다. 시간 단위로 자르면 텍스트가 일치하지 않으므로 forced alignment를 별도로 적용하거나 longform을 학습에서 제외해야 한다.
 
 ## 라이선스
