@@ -23,8 +23,9 @@ expresso_split_v2/
 ├── train/{ex01,ex02,ex03,ex04}/
 │   ├── confused/, default/, enunciated/, happy/,
 │   │   laughing/, sad/, whisper/                ← read 7 styles
-│   └── conv-angry/, conv-default/, …            ← conv 23~24 styles
+│   └── conv-angry/, conv-default/, …            ← conv 19~20 styles
 ├── dev/, test/                                  (same structure)
+├── train-exclude/, dev-exclude/, test-exclude/  (animal/child styles, persona-TTS-unfriendly)
 ├── longform/                                    (8 long read files + splits.json)
 ├── stats.json
 └── README.md
@@ -53,7 +54,8 @@ Every `*.wav` has a sibling `*.txt` carrying its transcript.
 1. **`build_split.py`** — extracts read entries from `splits/*.txt`, symlinks them from `audio_48khz/`, and pairs each with its transcript line. Files exceeding 30 s (longform) are routed into `longform/` with a `splits.json` describing the time range each split owns.
 2. **`build_conv_split.py`** — decodes 36 parquet shards. Each segment id (`{spk1}-{spk2}_{styles}_{dlg_id}_{start_sample}_{end_sample}`) yields a midpoint that determines its split via the time ranges in `splits/*.txt`. The parquet's authoritative `speaker_id` and `style` columns drive folder placement.
 3. **Merge** — moves `expresso_split_v2/conv/{split}/{speaker}/{style}/` → `expresso_split_v2/{split}/{speaker}/conv-{style}/`. Read folders keep plain style names; conv folders carry a `conv-` prefix.
-4. **Archive** (optional) — `tar czhf` dereferences the read symlinks so the resulting tarball is self-contained.
+4. **Filter** — moves persona-TTS-unfriendly styles (`conv-animal*`, `conv-child*`) out of the main tree into `{split}-exclude/{speaker}/`. Data is preserved, just sequestered.
+5. **Archive** (optional) — `tar czhf` dereferences the read symlinks so the resulting tarball is self-contained. `*-exclude/` is omitted from the tarball.
 
 ## Options
 
@@ -77,7 +79,7 @@ The dataset follows the design of the Expresso paper, which targets expressive s
 
 ## Data-quality notes
 
-- Conv transcripts come from automatic ASR (Parakeet TDT), so expect occasional errors. Non-verbal styles (`conv-animal`, `conv-nonverbal`) may carry nearly meaningless transcripts (e.g., `"Ribbit Ribbit Ribbit"`).
+- Conv transcripts come from automatic ASR (Parakeet TDT), so expect occasional errors. `conv-nonverbal` carries real dialogue mixed with breaths/laughs/grunts; `conv-animal*` and `conv-child*` carry near-meaningless transcripts (e.g., `"Ribbit Ribbit Ribbit"`) and are persona-TTS-unfriendly — the script automatically routes the latter to `*-exclude/`.
 - Longform transcripts are file-level, not segment-aligned. Slicing longform audio to the split time-ranges desynchronises the text — apply forced alignment or skip longform.
 
 ## License
