@@ -176,7 +176,14 @@ for split in train dev test; do
     spk=$(basename "$(dirname "$style_dir")")
     style=$(basename "$style_dir")
     mkdir -p "$excl_root/$spk"
-    mv "$style_dir" "$excl_root/$spk/$style"
+    dst="$excl_root/$spk/$style"
+    if [[ -d "$dst" ]]; then
+      # Re-run case: previous exclude copy already exists. Drop the live
+      # duplicate instead of nesting it inside the existing exclude folder.
+      rm -rf "$style_dir"
+    else
+      mv "$style_dir" "$dst"
+    fi
     filter_moved=$((filter_moved + 1))
   done < <(find "$src_root" -mindepth 2 -maxdepth 2 -type d \
               \( -iname '*animal*' -o -iname '*child*' \) 2>/dev/null)
