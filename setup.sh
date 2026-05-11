@@ -10,10 +10,11 @@
 #   6. Build conv split (parquet -> wav + .txt) -> expresso_split_v2/conv/
 #   7. Merge conv into main split tree with `conv-` prefix
 #   8. Filter animal/child styles into <split>-exclude/ siblings
-#   9. (Optional) Make dereferenced tarball for distribution (skips *-exclude/)
+#   9. Filter remaining conv-* styles into <split>-conv-exclude/ siblings
+#  10. (Optional) Make dereferenced tarball for distribution (skips *-exclude/)
 #
 # If expresso_split_v2/ is already present, steps 1–7 are skipped automatically;
-# only the filter step (8) and optional tarball (9) run.
+# only the filter steps (8, 9) and optional tarball (10) run.
 #
 # Usage:
 #   bash setup.sh              # full pipeline
@@ -55,14 +56,14 @@ if [[ "$NEED_BUILD" -eq 1 ]]; then
 
 # ────── Step 1: venv ──────
 if [[ ! -x "$VENV/bin/python" ]]; then
-  echo "==> [1/9] Creating venv at $VENV"
+  echo "==> [1/10] Creating venv at $VENV"
   "$PYTHON_BIN" -m venv "$VENV"
   "$VENV/bin/python" -m ensurepip --upgrade
 fi
 PY="$VENV/bin/python"
 
 # ────── Step 2: deps ──────
-echo "==> [2/9] Installing Python deps"
+echo "==> [2/10] Installing Python deps"
 "$PY" -m pip install -q --upgrade pip >/dev/null
 "$PY" -m pip install -q \
   huggingface_hub hf_transfer \
@@ -71,7 +72,7 @@ echo "==> [2/9] Installing Python deps"
 # ────── Step 3: download + extract Expresso tar ──────
 if [[ ! -d "$ROOT/audio_48khz" ]] || [[ ! -f "$ROOT/read_transcriptions.txt" ]]; then
   if [[ ! -f "$ROOT/expresso.tar" ]]; then
-    echo "==> [3/9] Downloading Expresso tar (~30 GB)"
+    echo "==> [3/10] Downloading Expresso tar (~30 GB)"
     if command -v aria2c >/dev/null; then
       aria2c -x 8 -s 8 -d "$ROOT" -o expresso.tar "$EXPRESSO_TAR_URL"
     else
@@ -102,14 +103,14 @@ if [[ ! -d "$ROOT/audio_48khz" ]] || [[ ! -f "$ROOT/read_transcriptions.txt" ]];
     rmdir "$ROOT/expresso" 2>/dev/null || true
   fi
 else
-  echo "==> [3/9] Expresso already extracted, skipping"
+  echo "==> [3/10] Expresso already extracted, skipping"
 fi
 
 if [[ "$TAR_ONLY" -ne 1 ]]; then
   # ────── Step 4: download nytopop conv ──────
   NYTOPOP_DIR="$ROOT/nytopop_expresso_conv"
   if [[ ! -d "$NYTOPOP_DIR/conversational" ]] || [[ -z "$(ls -A "$NYTOPOP_DIR/conversational" 2>/dev/null)" ]]; then
-    echo "==> [4/9] Downloading $NYTOPOP_REPO (~14.8 GB)"
+    echo "==> [4/10] Downloading $NYTOPOP_REPO (~14.8 GB)"
     HF_HUB_ENABLE_HF_TRANSFER=1 "$PY" - <<PYEOF
 from huggingface_hub import snapshot_download
 snapshot_download(
@@ -120,19 +121,19 @@ snapshot_download(
 )
 PYEOF
   else
-    echo "==> [4/9] nytopop already downloaded, skipping"
+    echo "==> [4/10] nytopop already downloaded, skipping"
   fi
 
   # ────── Step 5: build read split ──────
-  echo "==> [5/9] Building read split"
+  echo "==> [5/10] Building read split"
   "$PY" "$ROOT/build_split.py"
 
   # ────── Step 6: build conv split ──────
-  echo "==> [6/9] Building conv split"
+  echo "==> [6/10] Building conv split"
   "$PY" "$ROOT/build_conv_split.py"
 
   # ────── Step 7: merge conv with conv- prefix ──────
-  echo "==> [7/9] Merging conv into main split tree"
+  echo "==> [7/10] Merging conv into main split tree"
   "$PY" - <<'PYEOF'
 import os, shutil
 from pathlib import Path
@@ -165,7 +166,19 @@ fi
 fi  # end if NEED_BUILD
 
 # ────── Step 8: filter animal/child styles ──────
-echo "==> [8/9] Filtering animal/child styles into <split>-exclude/"
+echo "==> [8/10] Filtering animal/child styles into <split>-exclude/"
+
+filter_move_or_drop() {
+  # Idempotent move: if dest already exists, drop the live duplicate.
+  local src="$1" dst="$2"
+  if [[ -d "$dst" ]]; then
+    rm -rf "$src"
+  else
+    mkdir -p "$(dirname "$dst")"
+    mv "$src" "$dst"
+  fi
+}
+
 filter_moved=0
 for split in train dev test; do
   src_root="$OUT_DIR/$split"
@@ -175,38 +188,51 @@ for split in train dev test; do
     [[ -n "$style_dir" ]] || continue
     spk=$(basename "$(dirname "$style_dir")")
     style=$(basename "$style_dir")
-    mkdir -p "$excl_root/$spk"
-    dst="$excl_root/$spk/$style"
-    if [[ -d "$dst" ]]; then
-      # Re-run case: previous exclude copy already exists. Drop the live
-      # duplicate instead of nesting it inside the existing exclude folder.
-      rm -rf "$style_dir"
-    else
-      mv "$style_dir" "$dst"
-    fi
+    filter_move_or_drop "$style_dir" "$excl_root/$spk/$style"
     filter_moved=$((filter_moved + 1))
   done < <(find "$src_root" -mindepth 2 -maxdepth 2 -type d \
               \( -iname '*animal*' -o -iname '*child*' \) 2>/dev/null)
 done
 echo "    moved $filter_moved style folder(s) to *-exclude/"
 
+# ────── Step 9: filter remaining conv-* styles ──────
+echo "==> [9/10] Filtering remaining conv-* styles into <split>-conv-exclude/"
+conv_moved=0
+for split in train dev test; do
+  src_root="$OUT_DIR/$split"
+  [[ -d "$src_root" ]] || continue
+  excl_root="$OUT_DIR/${split}-conv-exclude"
+  while IFS= read -r style_dir; do
+    [[ -n "$style_dir" ]] || continue
+    spk=$(basename "$(dirname "$style_dir")")
+    style=$(basename "$style_dir")
+    filter_move_or_drop "$style_dir" "$excl_root/$spk/$style"
+    conv_moved=$((conv_moved + 1))
+  done < <(find "$src_root" -mindepth 2 -maxdepth 2 -type d \
+              -name 'conv-*' 2>/dev/null)
+done
+echo "    moved $conv_moved conv-* style folder(s) to *-conv-exclude/"
+
 TAR_OUT="$ROOT/expresso_split_v2.tar.gz"
-if [[ "$filter_moved" -gt 0 && -f "$TAR_OUT" ]]; then
+if [[ $((filter_moved + conv_moved)) -gt 0 && -f "$TAR_OUT" ]]; then
   echo "    NOTE: $TAR_OUT predates the filter — delete it and re-run if you"
-  echo "          want a fresh tarball without animal/child styles."
+  echo "          want a fresh tarball that reflects the latest filter state."
 fi
 
-# ────── Step 9: distribution tarball ──────
+# ────── Step 10: distribution tarball ──────
 if [[ "$MAKE_TAR" -eq 1 ]]; then
   if [[ ! -f "$TAR_OUT" ]]; then
-    echo "==> [9/9] Creating distribution tarball (dereferenced, excludes *-exclude/)"
-    tar czhf "$TAR_OUT" -C "$ROOT" --exclude='*-exclude' expresso_split_v2/
+    echo "==> [10/10] Creating distribution tarball (dereferenced, excludes *-exclude*/)"
+    tar czhf "$TAR_OUT" -C "$ROOT" \
+      --exclude='*-exclude' --exclude='*-conv-exclude' \
+      expresso_split_v2/
   else
-    echo "==> [9/9] tarball exists at $TAR_OUT, skipping"
+    echo "==> [10/10] tarball exists at $TAR_OUT, skipping"
   fi
 fi
 
 echo "==> Done!"
-echo "    Output:   $OUT_DIR/"
-echo "    Excluded: $OUT_DIR/{train,dev,test}-exclude/  (animal/child styles)"
+echo "    Output:        $OUT_DIR/"
+echo "    Excluded (a/c):$OUT_DIR/{train,dev,test}-exclude/       (animal/child styles)"
+echo "    Excluded (conv):$OUT_DIR/{train,dev,test}-conv-exclude/ (remaining conv-* styles)"
 [[ "$MAKE_TAR" -eq 1 ]] && echo "    Tarball: $TAR_OUT"
